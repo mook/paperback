@@ -1,0 +1,35 @@
+[package]
+name = "paperback"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+license = "AGPL-3.0-only"
+
+[dependencies]
+anyhow = "1.0.89"
+base58 = "0.2.0"
+byteorder = "1.5.0"
+chksum-sha2-512 = "0.0.0"
+clap = { version = "4.5.18", features = ["derive"] }
+image = { version = "0.25.2", default-features = false, features = ["avif", "bmp", "gif", "jpeg", "png", "rayon", "tga", "tiff", "webp"] }
+itertools = "0.13.0"
+num-integer = "0.1.46"
+printpdf = { version = "0.7.0", default-features = false, features = ["svg"] }
+qrcode = "0.14.1"
+rayon = "1.10.0"
+reed-solomon-simd = "2.2.2"
+rxing = "0.6.1"
+
+[build-dependencies]
+anyhow = "1.0.89"
+vergen-gix = "1.0.2"
+
+[profile.release]
+lto = true
+opt-level = "s"
+strip = true
+
+[dev-dependencies]
+assert_cmd = "2.0.16"
+assert_fs = "1.1.2"
+predicates = { version = "3.1.2", default-features = false }
