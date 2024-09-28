@@ -1,0 +1,32 @@
+name: Ensure sample file
+on: [push, pull_request]
+jobs:
+  check-sample:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          ${{ runner.os }}-cargo
+    - run: |
+        sudo apt-get update
+        sudo apt-get install -y diff-pdf-wx
+    - run: cargo build --release
+    - run: >-
+        target/release/paperback
+        create
+        --module-length=0.5
+        --override-commit=0000000
+        LICENSE
+        sample-out.pdf
+    - run: |
+        # The warning about GTK+ not having DISPLAY is benign.
+        diff-pdf sample.pdf sample-out.pdf

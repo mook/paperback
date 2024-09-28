@@ -1,0 +1,81 @@
+name: Test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          ${{ runner.os }}-cargo
+    - run: |
+        sudo apt-get update
+        sudo apt-get install -y poppler-utils
+    - run: cargo test
+  format:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          ${{ runner.os }}-cargo
+    - run: cargo fmt --check
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          ${{ runner.os }}-cargo
+    - run: cargo clippy --no-deps
+  build:
+    strategy:
+      matrix:
+        include:
+        - { platform: linux, runner: ubuntu-latest, executable: paperback }
+        - { platform: darwin, runner: macos-latest, executable: paperback }
+        - { platform: windows, runner: windows-latest, executable: paperback.exe }
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          ${{ runner.os }}-cargo
+    - run: cargo build --release
+    - uses: actions/upload-artifact@v4
+      with:
+        name: paperback-${{ matrix.platform }}
+        path: target/release/${{ matrix.executable }}
+        if-no-files-found: error
