@@ -135,6 +135,7 @@ fn render_banner(
     // Draw the metadata QR codes.
     let mut buf = Vec::<u8>::with_capacity(MetaHeader::LENGTH);
     Header::Meta(MetaHeader {
+        identifier: layout.identifier,
         hash: layout.hash,
         original_count: u16::try_from(layout.data_shard_count)
             .map_err(|_| anyhow!("cannot render {} data chunks", layout.data_shard_count))?,

@@ -9,7 +9,7 @@ license = "AGPL-3.0-only"
 anyhow = "1.0.89"
 base58 = "0.2.0"
 byteorder = "1.5.0"
-chksum-sha2-512 = "0.0.0"
+chksum-hash-sha2-512 = "0.0.1"
 clap = { version = "4.5.18", features = ["derive"] }
 image = { version = "0.25.2", default-features = false, features = ["avif", "bmp", "gif", "jpeg", "png", "rayon", "tga", "tiff", "webp"] }
 itertools = "0.13.0"

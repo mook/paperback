@@ -1,10 +1,10 @@
 use crate::{
     args::RestoreArgs,
-    header::{self, Header, IDENTIFIER_LENGTH},
+    header::{self, Header},
 };
 use anyhow::{anyhow, Context, Result};
 use byteorder::{ByteOrder, LittleEndian};
-use chksum_sha2_512::SHA2_512;
+use chksum_hash_sha2_512 as sha512;
 use rayon::prelude::*;
 use reed_solomon_simd::ReedSolomonDecoder;
 use rxing::{
@@ -65,7 +65,6 @@ fn write_output<P>(
     payloads: &Vec<(u16, Vec<u8>)>,
     force: bool,
     output_path: P,
-    commit: &str,
 ) -> Result<()>
 where
     P: AsRef<Path>,
@@ -90,7 +89,7 @@ where
     let expected_size =
         LittleEndian::read_u64(&last_shard[last_shard.len() - size_of::<u64>()..]) as usize;
     let mut bytes_written: usize = 0;
-    let mut hasher = SHA2_512::new();
+    let mut hasher = sha512::new();
 
     let mut out_file = fs::File::options()
         .truncate(true)
@@ -107,7 +106,6 @@ where
         out_file.write_all(shard)?;
         bytes_written += shard.len();
     }
-    hasher.update(commit);
     let digest = hasher.digest().into_inner();
     if digest.ne(&meta.hash) {
         Err(anyhow!(
@@ -127,7 +125,7 @@ pub(crate) fn restore(args: &RestoreArgs) -> Result<()> {
     println!("Restoring from {} images...", args.input_path.len());
     let shards = read_shards(&args.input_path)?;
     let mut previous_meta: Option<header::MetaHeader> = None;
-    let mut previous_identifier: Option<[u8; IDENTIFIER_LENGTH]> = None;
+    let mut previous_identifier: Option<header::Identifier> = None;
     let mut payloads = Vec::<(u16, Vec<u8>)>::new();
 
     for shard in shards.iter() {
@@ -135,25 +133,23 @@ pub(crate) fn restore(args: &RestoreArgs) -> Result<()> {
         let header = Header::read_from(&mut bytes)?;
         match header {
             Header::Meta(m) => {
+                if let Some(ref identifier) = previous_identifier {
+                    if identifier.ne(&m.identifier) {
+                        Err(anyhow!("identifier mismatch"))?;
+                    }
+                } else {
+                    previous_identifier = Some(m.identifier);
+                }
                 if let Some(ref meta) = previous_meta {
                     if meta.ne(&m) {
                         Err(anyhow!("meta header mismatch"))?;
                     }
                 } else {
-                    if let Some(ref id) = previous_identifier {
-                        if !m.hash.starts_with(id) {
-                            Err(anyhow!("meta does not match identifier"))?;
-                        }
-                    }
                     previous_meta = Some(m);
                 }
             }
             Header::Payload(p) => {
-                if let Some(ref m) = previous_meta {
-                    if !m.hash.starts_with(&p.identifier) {
-                        Err(anyhow!("payload does not match meta"))?;
-                    }
-                } else if let Some(ref id) = previous_identifier {
+                if let Some(ref id) = previous_identifier {
                     if id.ne(&p.identifier) {
                         Err(anyhow!("payload has incorrect identifier"))?;
                     }
@@ -174,13 +170,7 @@ pub(crate) fn restore(args: &RestoreArgs) -> Result<()> {
         meta.recovery_count
     );
 
-    write_output(
-        &meta,
-        &payloads,
-        args.force,
-        &args.output_path,
-        &args.override_commit,
-    )?;
+    write_output(&meta, &payloads, args.force, &args.output_path)?;
 
     Ok(())
 }

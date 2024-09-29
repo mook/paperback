@@ -1,5 +1,5 @@
 use crate::args::{CreateArgs, PageDimensions};
-use crate::header::{PayloadHeader, Sha512Array};
+use crate::header::{Identifier, PayloadHeader, Sha512Array};
 use anyhow::{anyhow, Result};
 use num_integer::Integer;
 use printpdf::Mm;
@@ -21,6 +21,7 @@ pub struct Options {
     /// The available height, excluding margins.
     pub avail_height: Mm,
 
+    pub identifier: Identifier,
     pub hash: Sha512Array,
     pub version: qrcode::Version,
     pub level: EcLevel,
@@ -40,7 +41,12 @@ pub struct Options {
 }
 
 /// Compute layout options.
-pub fn compute(args: &CreateArgs, data_size: usize, data_hash: Sha512Array) -> Result<Options> {
+pub fn compute(
+    args: &CreateArgs,
+    data_size: usize,
+    identifier: Identifier,
+    data_hash: Sha512Array,
+) -> Result<Options> {
     let page: PageDimensions = args.paper_size.into();
     let avail_width = page.width - args.margin_left - args.margin_right;
     let avail_height = page.height - args.margin_top - args.margin_bottom;
@@ -125,6 +131,7 @@ pub fn compute(args: &CreateArgs, data_size: usize, data_hash: Sha512Array) -> R
             avail_width: page.width - args.margin_left - args.margin_right,
             avail_height: page.height - args.margin_top - args.margin_bottom,
 
+            identifier,
             hash: data_hash,
             version: best_version,
             level: best_ec_level,
