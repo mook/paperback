@@ -29,4 +29,4 @@ jobs:
         sample-out.pdf
     - run: |
         # The warning about GTK+ not having DISPLAY is benign.
-        diff-pdf sample.pdf sample-out.pdf
+        diff-pdf --verbose sample.pdf sample-out.pdf
