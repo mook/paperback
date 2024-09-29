@@ -93,7 +93,7 @@ pub(crate) struct CreateArgs {
     /// Output file to write to.
     pub out_path: PathBuf,
 
-    /// Minimum number of QR codes per row.
+    /// Minimum number of QR codes per row (up to 5).
     #[arg(short, long, default_value = "3", help_heading = "Layout")]
     pub row_count: usize,
 

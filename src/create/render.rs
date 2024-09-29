@@ -70,15 +70,19 @@ fn render_codes(
     codes: &mut impl Iterator<Item = Svg>,
     layer: &PdfLayerReference,
 ) -> Result<()> {
+    let shard_width = layout.module_length * layout.version.width().into();
     let quiet_offset = layout.module_length * 4.0;
-    let chunk_offset = layout.module_length * layout.version.width().into() + quiet_offset;
-    for row in 0..layout.chunks_per_row {
-        for col in 0..layout.chunks_per_row {
+    let area_width = shard_width * layout.shards_per_row as f32
+        + quiet_offset * (layout.shards_per_row - 1) as f32;
+    let left_offset = (layout.page_width - area_width) / 2.0;
+    let chunk_offset = shard_width + quiet_offset;
+    for row in 0..layout.shards_per_row {
+        for col in 0..layout.shards_per_row {
             let svg = codes.next().ok_or(anyhow!("Ran out of QR codes"))?;
             // Scale factor, in dots.
             let scale_factor = layout.module_length.0 * DOTS_PER_INCH / MM_PER_INCH;
             let transform = printpdf::svg::SvgTransform {
-                translate_x: Some((layout.margin_left + chunk_offset * col as f32).into()),
+                translate_x: Some((left_offset + chunk_offset * col as f32).into()),
                 translate_y: Some(
                     (layout.margin_bottom + vertical_offset + chunk_offset * row as f32).into(),
                 ),
@@ -142,15 +146,15 @@ fn render_banner(
     let mut buf = Vec::<u8>::with_capacity(MetaHeader::LENGTH);
     Header::Meta(MetaHeader {
         hash: layout.hash,
-        original_count: u16::try_from(layout.data_chunk_count)
-            .map_err(|_| anyhow!("cannot render {} data chunks", layout.data_chunk_count))?,
-        recovery_count: u16::try_from(layout.recovery_chunk_count).map_err(|_| {
+        original_count: u16::try_from(layout.data_shard_count)
+            .map_err(|_| anyhow!("cannot render {} data chunks", layout.data_shard_count))?,
+        recovery_count: u16::try_from(layout.recovery_shard_count).map_err(|_| {
             anyhow!(
                 "cannot render {} recovery chunks",
-                layout.recovery_chunk_count
+                layout.recovery_shard_count
             )
         })?,
-        shard_bytes: layout.bytes_per_chunk as u64,
+        shard_bytes: layout.data_bytes_per_shard as u64,
     })
     .write_to(&mut buf)?;
     // Similar to the recovery chunks, we need to convert to string and back to SVG.

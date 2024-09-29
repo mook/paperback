@@ -20,7 +20,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// `IntoFlatIter` is a helper to make the return type of [`read_chunks`] easier to read.
+/// `IntoFlatIter` is a helper to make the return type of [`read_shards`] easier to read.
 struct IntoFlatIter<T> {
     value: Vec<Vec<T>>,
 }
@@ -31,9 +31,9 @@ impl<T> IntoFlatIter<T> {
     }
 }
 
-/// `read_chunks` reads the given files, returning scanned QR codes.
-fn read_chunks(input_paths: &Vec<PathBuf>) -> Result<IntoFlatIter<rxing::RXingResult>> {
-    let chunk_list = input_paths
+/// `read_shards` reads the given files, returning scanned QR codes.
+fn read_shards(input_paths: &Vec<PathBuf>) -> Result<IntoFlatIter<rxing::RXingResult>> {
+    let shard_list = input_paths
         .par_iter()
         .map(|input_path| -> anyhow::Result<Vec<_>> {
             let image = image::open(input_path)?;
@@ -55,10 +55,10 @@ fn read_chunks(input_paths: &Vec<PathBuf>) -> Result<IntoFlatIter<rxing::RXingRe
             Ok(results)
         })
         .collect::<Result<Vec<_>>>()?;
-    Ok(IntoFlatIter { value: chunk_list })
+    Ok(IntoFlatIter { value: shard_list })
 }
 
-/// Given the reed-solomon recovery chunks, reconstruct the file and write it to the given name.
+/// Given the reed-solomon recovery shards, reconstruct the file and write it to the given name.
 /// If `force` is not set, this will return an error if the file already exists.
 fn write_output<P>(
     meta: &header::MetaHeader,
@@ -84,11 +84,11 @@ where
         .with_context(|| "failed to decode original data")?;
     let decoded = decoder_result
         .restored_original_iter()
-        .map(|(_, chunk)| chunk)
+        .map(|(_, shard)| shard)
         .collect::<Vec<_>>();
-    let last_chunk = decoded.last().ok_or(anyhow!("no chunks"))?;
+    let last_shard = decoded.last().ok_or(anyhow!("no shards"))?;
     let expected_size =
-        LittleEndian::read_u64(&last_chunk[last_chunk.len() - size_of::<u64>()..]) as usize;
+        LittleEndian::read_u64(&last_shard[last_shard.len() - size_of::<u64>()..]) as usize;
     let mut bytes_written: usize = 0;
     let mut hasher = SHA2_512::new();
 
@@ -97,15 +97,15 @@ where
         .create_new(!force)
         .write(true)
         .open(&output_path)?;
-    for chunk in decoded {
-        if chunk.len() + bytes_written > expected_size {
-            hasher.update(&chunk[..expected_size - bytes_written]);
-            out_file.write_all(&chunk[..expected_size - bytes_written])?;
+    for shard in decoded {
+        if shard.len() + bytes_written > expected_size {
+            hasher.update(&shard[..expected_size - bytes_written]);
+            out_file.write_all(&shard[..expected_size - bytes_written])?;
             break;
         }
-        hasher.update(chunk);
-        out_file.write_all(chunk)?;
-        bytes_written += chunk.len();
+        hasher.update(shard);
+        out_file.write_all(shard)?;
+        bytes_written += shard.len();
     }
     hasher.update(commit);
     let digest = hasher.digest().into_inner();
@@ -125,13 +125,13 @@ where
 
 pub(crate) fn restore(args: &RestoreArgs) -> Result<()> {
     println!("Restoring from {} images...", args.input_path.len());
-    let chunks = read_chunks(&args.input_path)?;
+    let shards = read_shards(&args.input_path)?;
     let mut previous_meta: Option<header::MetaHeader> = None;
     let mut previous_identifier: Option<[u8; IDENTIFIER_LENGTH]> = None;
     let mut payloads = Vec::<(u16, Vec<u8>)>::new();
 
-    for chunk in chunks.iter() {
-        let mut bytes = chunk.getRawBytes().as_slice();
+    for shard in shards.iter() {
+        let mut bytes = shard.getRawBytes().as_slice();
         let header = Header::read_from(&mut bytes)?;
         match header {
             Header::Meta(m) => {
@@ -167,7 +167,7 @@ pub(crate) fn restore(args: &RestoreArgs) -> Result<()> {
         };
     }
 
-    let meta = previous_meta.ok_or(anyhow!("could not locate any metadata chunks"))?;
+    let meta = previous_meta.ok_or(anyhow!("could not locate any metadata shards"))?;
     println!(
         "Data loaded: got {}/{} recovery shards",
         payloads.len(),

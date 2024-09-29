@@ -9,7 +9,7 @@ use printpdf::PdfDocument;
 use qrcode::QrCode;
 use rayon::prelude::*;
 use reed_solomon_simd::ReedSolomonEncoder;
-use std::{ffi::OsStr, fs, io::BufWriter};
+use std::{fs, io::BufWriter};
 
 pub(crate) fn create(args: &CreateArgs) -> Result<()> {
     // Read the file (into memory, for now)
@@ -28,42 +28,57 @@ pub(crate) fn create(args: &CreateArgs) -> Result<()> {
     // Given the QR code info, resize the data to have the actual size appended.  This is necessary
     // so that we can avoid having trailing null bytes at the end after decode.
     let buffer_size =
-        (size_of::<u64>() + data_bytes.len()).next_multiple_of(layout.bytes_per_chunk);
+        (size_of::<u64>() + data_bytes.len()).next_multiple_of(layout.data_bytes_per_shard);
     data_bytes.resize(buffer_size, 0);
     LittleEndian::write_u64(&mut data_bytes[buffer_size - size_of::<u64>()..], data_size);
 
     // Compute the reed-solomon shards.
     let mut rs_encoder = ReedSolomonEncoder::new(
-        layout.data_chunk_count,
-        layout.recovery_chunk_count,
-        layout.bytes_per_chunk,
+        layout.data_shard_count,
+        layout.recovery_shard_count,
+        layout.data_bytes_per_shard,
     )?;
-    for index in 0..layout.data_chunk_count {
+    for index in 0..layout.data_shard_count {
         rs_encoder.add_original_shard(
-            &data_bytes[index * layout.bytes_per_chunk..(index + 1) * layout.bytes_per_chunk],
+            &data_bytes
+                [index * layout.data_bytes_per_shard..(index + 1) * layout.data_bytes_per_shard],
         )?;
     }
 
     // Encode the reed-solomon shards into QR codes.
-    let chunks_per_page = layout.chunks_per_row * layout.chunks_per_row;
+    let shards_per_page = layout.shards_per_row * layout.shards_per_row;
     let mut svgs = rs_encoder
         .encode()?
         .recovery_iter()
         .collect::<Vec<_>>()
         .par_iter()
         .enumerate()
-        .map(|(i, chunk)| {
+        .map(|(i, shard)| {
             let header = header::Header::Payload(header::PayloadHeader {
                 index: i.try_into()?,
                 identifier: layout.hash[0..header::IDENTIFIER_LENGTH].try_into()?,
             });
-            let mut buf =
-                Vec::<u8>::with_capacity(header::PayloadHeader::LENGTH + layout.bytes_per_chunk);
+            let mut buf = Vec::<u8>::with_capacity(
+                header::PayloadHeader::LENGTH + layout.data_bytes_per_shard,
+            );
             header.write_to(&mut buf)?;
-            buf.extend_from_slice(chunk);
+            buf.extend_from_slice(shard);
+
             // We need to convert the QR code into an SVG, and then parse it _back_ into an
-            // object...
-            let svg_string = QrCode::with_version(buf, layout.version, layout.level)?
+            // object.  Also, we need to force byte mode to avoid issues where sometimes the
+            // "optimal" segmentation algorithm ends up taking more space.
+            let mut bits = qrcode::bits::Bits::new(layout.version);
+            bits.push_byte_data(&buf)?;
+            bits.push_terminator(layout.level)?;
+            let svg_string = QrCode::with_bits(bits, layout.level)
+                .map_err(|e| {
+                    anyhow!(
+                        "failed to encode {} bytes of data into {:?}{:?}: {e}",
+                        &buf.len(),
+                        layout.version,
+                        layout.level
+                    )
+                })?
                 .render::<qrcode::render::svg::Color>()
                 .quiet_zone(false)
                 .module_dimensions(1, 1)
@@ -71,14 +86,13 @@ pub(crate) fn create(args: &CreateArgs) -> Result<()> {
             Ok(printpdf::svg::Svg::parse(&svg_string)?)
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
-    let svg_chunks = svgs.drain(..).chunks(chunks_per_page);
+    let svg_chunks = svgs.drain(..).chunks(shards_per_page);
 
     // Set up the PDF document.
     let (doc, mut page_index, mut layer_index) = PdfDocument::new(
         args.file_path
             .file_name()
-            .unwrap_or(OsStr::new("PaperBack"))
-            .to_str()
+            .and_then(|name| name.to_str())
             .unwrap_or("PaperBack"),
         layout.page_width,
         layout.page_height,
@@ -106,6 +120,16 @@ pub(crate) fn create(args: &CreateArgs) -> Result<()> {
     doc.save(&mut BufWriter::new(fs::File::create(
         args.out_path.clone(),
     )?))?;
+
+    println!(
+        "Wrote {} pages to {} ({} {:?}{:?} shards, {} needed to recover)",
+        layout.recovery_page_count,
+        args.out_path.display(),
+        layout.recovery_shard_count,
+        layout.version,
+        layout.level,
+        layout.data_shard_count
+    );
 
     Ok(())
 }

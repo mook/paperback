@@ -3,19 +3,19 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{Read, Write};
 
 /// The byte length of the identifier, which is a prefix of the original document's sha512 hash.
-pub const IDENTIFIER_LENGTH: usize = 5;
+pub const IDENTIFIER_LENGTH: usize = 4;
 
 /// `Sha512Array` is a alias for an [`u8`] array that is the length of a sha512 output.
 pub(crate) type Sha512Array = [u8; 64];
 
-/// `MetaHeader` is a header that appears in a metadata chunk.
+/// `MetaHeader` is a header that appears in a metadata QR code.
 // This has a fixed "index" of `0xFFFF`
 #[derive(Debug, PartialEq)]
 pub struct MetaHeader {
     pub hash: Sha512Array,
-    /// Number of original input blocks.  None of these are ever printed.
+    /// Number of original input shards.  None of these are ever printed.
     pub original_count: u16,
-    /// Number of total recovery blocks.
+    /// Number of total recovery shards.
     pub recovery_count: u16,
     /// Number of bytes per shard, excluding headers.
     pub shard_bytes: u64,
@@ -26,10 +26,10 @@ impl MetaHeader {
         size_of::<Sha512Array>() + size_of::<u16>() + size_of::<u16>() + size_of::<u64>();
 }
 
-/// `PayloadHeader` is a header that appears in a payload chunk.
+/// `PayloadHeader` is a header that appears in a payload QR code.
 #[derive(Debug)]
 pub struct PayloadHeader {
-    /// Index for a recovery chunk; can be between 0 and 65534 inclusive.
+    /// Index for a recovery shard; can be between 0 and 65534 inclusive.
     pub index: u16,
     /// Identifier for this document.
     pub identifier: [u8; IDENTIFIER_LENGTH],
