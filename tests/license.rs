@@ -2,6 +2,7 @@ use anyhow::Result;
 use assert_cmd::Command;
 use assert_fs::prelude::*;
 use predicates::prelude::*;
+use rayon::prelude::*;
 
 /// Take the LICENSE file, encode it as PDF, and restore it, checking that the result is correct.
 #[test]
@@ -22,12 +23,32 @@ fn test_license() -> Result<()> {
 
     // Convert to PNGs
     println!("Converting PDF to PNGs...");
-    Command::new("pdftocairo")
+    Command::new("pdfseparate")
         .current_dir(work_dir.path())
-        .arg("-png")
         .arg(pdf_file.as_os_str())
+        .arg(work_dir.child("output-%d.pdf").as_os_str())
         .assert()
         .try_success()?;
+    work_dir
+        .read_dir()?
+        .map(|d| d.map_err(anyhow::Error::from))
+        .collect::<Result<Vec<_>>>()?
+        .par_iter()
+        .filter(|d| {
+            d.file_name()
+                .to_str()
+                .is_some_and(|n| n.starts_with("output-"))
+        })
+        .map(|d| d.path())
+        .filter(|n| n.extension().is_some_and(|ext| ext.eq("pdf")))
+        .for_each(|name| {
+            Command::new("pdftocairo")
+                .current_dir(work_dir.path())
+                .arg("-png")
+                .arg(name.as_os_str())
+                .assert()
+                .success();
+        });
 
     // Restore the output
     let images = work_dir
