@@ -10,11 +10,15 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: |
-          ~/.cargo
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-test-${{ hashFiles('Cargo.*') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          ${{ runner.os }}-cargo-test-${{ hashFiles('Cargo.*') }}
+          ${{ runner.os }}-cargo-test
           ${{ runner.os }}-cargo
     - run: |
         sudo apt-get update
@@ -26,15 +30,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
-          ${{ runner.os }}-cargo
     - run: cargo fmt --check
   clippy:
     runs-on: ubuntu-latest
@@ -45,11 +40,15 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: |
-          ~/.cargo
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-dev-${{ hashFiles('Cargo.*') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          ${{ runner.os }}-cargo-dev-${{ hashFiles('Cargo.*') }}
+          ${{ runner.os }}-cargo-dev
           ${{ runner.os }}-cargo
     - run: cargo clippy --no-deps
   build:
@@ -67,11 +66,15 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: |
-          ~/.cargo
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.*') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.*') }}
+          ${{ runner.os }}-cargo-release
           ${{ runner.os }}-cargo
     - run: cargo build --release
     - uses: actions/upload-artifact@v4

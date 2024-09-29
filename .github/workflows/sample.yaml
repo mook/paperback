@@ -10,11 +10,15 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: |
-          ~/.cargo
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.*') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.*') }}
+          ${{ runner.os }}-cargo-release
           ${{ runner.os }}-cargo
     - run: |
         sudo apt-get update
