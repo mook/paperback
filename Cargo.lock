@@ -2047,6 +2047,7 @@ dependencies = [
  "image 0.25.2",
  "itertools 0.13.0",
  "num-integer",
+ "paperback-generate-fonts",
  "predicates",
  "printpdf",
  "qrcode",
@@ -2054,6 +2055,13 @@ dependencies = [
  "reed-solomon-simd",
  "rxing",
  "vergen-gix",
+]
+
+[[package]]
+name = "paperback-generate-fonts"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
 ]
 
 [[package]]

@@ -1,5 +1,8 @@
 use super::layout;
-use crate::header::{Header, MetaHeader};
+use crate::{
+    fonts::metrics::{self, Alignment, SizedFont},
+    header::{Header, MetaHeader},
+};
 use anyhow::{anyhow, Result};
 use base58::ToBase58;
 use printpdf::{BuiltinFont, Mm, PdfDocumentReference, PdfLayerReference, Pt, Svg};
@@ -7,29 +10,6 @@ use qrcode::QrCode;
 
 const DOTS_PER_INCH: f32 = 300.0;
 const MM_PER_INCH: f32 = 25.4;
-
-/// Font metrics; one point is always 1000 units.
-struct FontMetrics {
-    /// Character width, as a fraction of a point. Undefined for non-fixed-width fonts.
-    char_width: f32,
-    /// Descender height.
-    descender: f32,
-}
-
-const COURIER_METRICS: FontMetrics = FontMetrics {
-    char_width: 600.0 / 1000.0,
-    descender: 159.0 / 1000.0,
-};
-/*
-const HELV_METRICS: FontMetrics = FontMetrics {
-    char_width: f32::NAN,
-    descender: 207.0 / 1000.0,
-};
-*/
-const HELV_BOLD_METRICS: FontMetrics = FontMetrics {
-    char_width: f32::NAN,
-    descender: 207.0 / 1000.0,
-};
 
 pub(crate) struct Bounds {
     top: Mm,
@@ -128,10 +108,6 @@ fn render_banner(
     layer: &PdfLayerReference,
     commit: &str,
 ) -> Result<()> {
-    let courier = doc.add_builtin_font(BuiltinFont::Courier)?;
-    let helv = doc.add_builtin_font(BuiltinFont::Helvetica)?;
-    let helv_bold = doc.add_builtin_font(BuiltinFont::HelveticaBold)?;
-
     // Draw the metadata QR codes.
     let mut buf = Vec::<u8>::with_capacity(MetaHeader::LENGTH);
     Header::Meta(MetaHeader {
@@ -183,38 +159,35 @@ fn render_banner(
     );
 
     // Draw the title text: repo, page info, and document id (hash).
-    let label_font_size: f32 = 14.0;
-    let info_font_size: f32 = 24.0;
-    let description_font_size: f32 = 10.0;
-    let repo_font_size: f32 = 14.0;
+    let repo_font = SizedFont::new(doc, BuiltinFont::Courier, Pt(14.0))?;
+    let info_font = SizedFont::new(doc, BuiltinFont::Courier, Pt(24.0))?;
+    let label_font = SizedFont::new(doc, BuiltinFont::HelveticaBold, Pt(14.0))?;
+    let description_font = SizedFont::new(doc, BuiltinFont::Helvetica, Pt(10.0))?;
 
     let repo = format!("github.com/mook/paperpack@{commit}");
-    let repo_width: Mm = Pt(repo_font_size * repo.len() as f32 * COURIER_METRICS.char_width).into();
     let repo_avail_width = bounds.width() - desired_svg_length * 2.0;
-    layer.use_text(
-        repo,
-        repo_font_size,
-        bounds.left + desired_svg_length + repo_avail_width / 2.0 - repo_width / 2.0,
-        bounds.top - Pt(repo_font_size).into(),
-        &courier,
+    repo_font.write(
+        layer,
+        &repo,
+        bounds.left + desired_svg_length + repo_avail_width / 2.0,
+        bounds.top - repo_font.size.into(),
+        &Alignment::Center,
     );
 
     let document_id = layout.hash[..6].to_base58();
-    layer.use_text(
+    info_font.write(
+        layer,
         document_id,
-        info_font_size,
         bounds.left + quiet_zone_length + desired_svg_length + quiet_zone_length,
-        bounds.bottom + Pt(COURIER_METRICS.descender * info_font_size).into(),
-        &courier,
+        bounds.bottom + info_font.descender().into(),
+        &Alignment::Left,
     );
-    layer.use_text(
+    label_font.write(
+        layer,
         "Document ID",
-        label_font_size,
         bounds.left + quiet_zone_length + desired_svg_length + quiet_zone_length,
-        bounds.bottom
-            + Pt(info_font_size).into()
-            + Pt(label_font_size * HELV_BOLD_METRICS.descender).into(),
-        &helv_bold,
+        bounds.bottom + info_font.size.into() + label_font.descender().into(),
+        &Alignment::Left,
     );
 
     let page_info = format!(
@@ -223,61 +196,47 @@ fn render_banner(
         layout.data_page_count,
         layout.recovery_page_count - layout.data_page_count
     );
-    let page_info_width: Mm =
-        Pt(info_font_size * page_info.len() as f32 * COURIER_METRICS.char_width).into();
-    layer.use_text(
+    info_font.write(
+        layer,
         page_info,
-        info_font_size,
-        bounds.right - quiet_zone_length - desired_svg_length - quiet_zone_length - page_info_width,
-        bounds.bottom + Pt(COURIER_METRICS.descender * info_font_size).into(),
-        &courier,
+        bounds.right - quiet_zone_length - desired_svg_length - quiet_zone_length,
+        bounds.bottom + info_font.descender().into(),
+        &Alignment::Right,
     );
-    // Hard code the horizontal advance of the "Page Info" text here. It should be 4340 w/ kerning...
-    let page_info_label_width: Mm = Pt(label_font_size * 4500.0 / 1000.0).into();
-    layer.use_text(
-        "Page Info",
-        label_font_size,
-        bounds.right
-            - quiet_zone_length
-            - desired_svg_length
-            - quiet_zone_length
-            - page_info_label_width,
-        bounds.bottom
-            + Pt(info_font_size).into()
-            + Pt(label_font_size * HELV_BOLD_METRICS.descender).into(),
-        &helv_bold,
+    label_font.write(
+        layer,
+        "Page Count",
+        bounds.right - quiet_zone_length - desired_svg_length - quiet_zone_length,
+        bounds.bottom + info_font.size.into() + label_font.descender().into(),
+        &Alignment::Right,
     );
 
     // Write some descriptive text.
-    layer.begin_text_section();
-    layer.set_font(&helv, description_font_size);
-    layer.set_text_cursor(
-        bounds.left + quiet_zone_length + desired_svg_length + quiet_zone_length,
-        bounds.top
-            - Pt(repo_font_size).into()
-            - Pt(description_font_size).into()
-            - Pt(description_font_size).into(),
+    let description = format!(
+        "
+        This is a paper backup created using the program listed above.
+        When {}, it can be used to restore the original file.
+        More pages may be required if some QR codes fail to be decoded.
+        At least one copy of the QR code to the left and right of this text is required.
+    ",
+        if layout.data_page_count == 1 {
+            "any page is scanned".to_string()
+        } else {
+            format!("at least {} pages are combined", layout.data_page_count)
+        }
     );
-    layer.set_line_height(description_font_size);
-    for line in [
-        "This is a paper backup created using the program listed above.",
-        format!(
-            "When {}, it can be used to restore",
-            if layout.data_page_count == 1 {
-                "any page is scanned".to_string()
-            } else {
-                format!("at least {} pages are combined", layout.data_page_count)
-            }
-        )
-        .as_str(),
-        "the original file.  More pages may be required if some QR codes",
-        "fail to be decoded.  At least one copy of the QR code to the left",
-        "and right of this text is required.",
-    ] {
-        layer.write_text(line, &helv);
-        layer.add_line_break();
-    }
-    layer.end_text_section();
+    let description_bounds = &metrics::Bounds {
+        top: bounds.bottom + desired_svg_length,
+        right: bounds.right - quiet_zone_length - desired_svg_length - quiet_zone_length,
+        bottom: bounds.bottom,
+        left: bounds.left + quiet_zone_length + desired_svg_length + quiet_zone_length,
+    };
+    description_font.write_section(
+        layer,
+        description.split_whitespace(),
+        description_bounds,
+        &Alignment::Left,
+    );
 
     Ok(())
 }

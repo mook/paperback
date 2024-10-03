@@ -1,5 +1,6 @@
 mod args;
 mod create;
+mod fonts;
 mod header;
 mod restore;
 use args::Commands;

@@ -19,10 +19,12 @@ qrcode = "0.14.1"
 rayon = "1.10.0"
 reed-solomon-simd = "2.2.2"
 rxing = "0.6.1"
+paperback-generate-fonts = { path = "generate-fonts" }
 
 [build-dependencies]
 anyhow = "1.0.89"
 vergen-gix = "1.0.2"
+paperback-generate-fonts = { path = "generate-fonts" }
 
 [profile.release]
 lto = true
@@ -33,3 +35,6 @@ strip = true
 assert_cmd = "2.0.16"
 assert_fs = "1.1.2"
 predicates = { version = "3.1.2", default-features = false }
+
+[workspace]
+members = [ "generate-fonts" ]

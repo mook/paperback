@@ -43,6 +43,20 @@ Run `paperback restore output.zip input.png input.png` etc. to restore.
 You must have enough of the large QR codes (regardless of how many can be
 recovered per page), plus at least one of the smaller, duplicated QR codes.
 
+## License
+
+The program as a whole is licensed under [AGPL-3.0-only](LICENSE).  This
+contains the (unmodified) font metrics from Adobe for the 14 built-in fonts for
+PDFs; that has the following license:
+
+> This file and the 14 PostScript(R) AFM files it accompanies may be used,
+copied, and distributed for any purpose and without charge, with or without
+modification, provided that all copyright notices are retained; that the AFM
+files are not distributed without this file; that all modifications to this file
+or any of the AFM files are prominently noted in the modified file(s); and that
+this paragraph is not modified. Adobe Systems has no responsibility or
+obligation to support the use of the AFM files.
+
 ## See also
 - https://github.com/cyphar/paperback
   - Need to manage key shards etc.
