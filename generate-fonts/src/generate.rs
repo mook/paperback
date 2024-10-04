@@ -25,7 +25,7 @@ pub fn generate_metrics() -> Result<()> {
     writeln!(out_file, "use crate::fonts::metrics::FontMetrics;")?;
     writeln!(out_file, "use std::collections::HashMap;")?;
     writeln!(out_file, "use std::sync::LazyLock;")?;
-    writeln!(out_file, "")?;
+    writeln!(out_file)?;
 
     for (identifier, metric) in &metrics {
         writeln!(
@@ -36,7 +36,7 @@ pub fn generate_metrics() -> Result<()> {
         writeln!(out_file, "}});")?;
     }
 
-    writeln!(out_file, "")?;
+    writeln!(out_file)?;
     writeln!(
         out_file,
         "pub(crate) fn from(font: printpdf::BuiltinFont) -> &'static FontMetrics {{"
