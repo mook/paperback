@@ -108,6 +108,52 @@ fn render_banner(
     layer: &PdfLayerReference,
     commit: &str,
 ) -> Result<()> {
+    // Draw the repo text
+    const BLACK: printpdf::Color = printpdf::Color::Greyscale(printpdf::Greyscale {
+        percent: 0.,
+        icc_profile: None,
+    });
+    const WHITE: printpdf::Color = printpdf::Color::Greyscale(printpdf::Greyscale {
+        percent: 100.,
+        icc_profile: None,
+    });
+    let repo_font = SizedFont::new(doc, BuiltinFont::Courier, Pt(14.0))?;
+    layer.set_fill_color(BLACK);
+    layer.add_rect(printpdf::Rect {
+        ll: printpdf::Point {
+            x: bounds.left.into_pt(),
+            y: if page_num % 2 == 0 {
+                bounds.bottom.into_pt()
+            } else {
+                bounds.top.into_pt() - repo_font.size * 2.
+            },
+        },
+        ur: printpdf::Point {
+            x: bounds.right.into_pt(),
+            y: if page_num % 2 == 0 {
+                bounds.bottom.into_pt() + repo_font.size * 2.
+            } else {
+                bounds.top.into_pt()
+            },
+        },
+        mode: printpdf::path::PaintMode::Fill,
+        winding: printpdf::path::WindingOrder::EvenOdd,
+    });
+    layer.set_fill_color(WHITE);
+    let repo = format!("github.com/mook/paperpack@{commit}");
+    repo_font.write(
+        layer,
+        &repo,
+        bounds.left + bounds.width() / 2.0,
+        if page_num % 2 == 0 {
+            bounds.bottom + (repo_font.size - repo_font.descender()).into()
+        } else {
+            bounds.top - (repo_font.size + repo_font.descender()).into()
+        },
+        &Alignment::Center,
+    );
+    layer.set_fill_color(BLACK);
+
     // Draw the metadata QR codes.
     let mut buf = Vec::<u8>::with_capacity(MetaHeader::LENGTH);
     Header::Meta(MetaHeader {
@@ -131,62 +177,57 @@ fn render_banner(
         .module_dimensions(1, 1)
         .build();
     let svg = printpdf::svg::Svg::parse(&svg_string)?;
-    let desired_svg_length = bounds.height() / 2.0;
+    let repo_banner_height = repo_font.size * 2.;
+    let desired_svg_length: Mm = Pt(128.).into();
     let actual_svg_length: Mm = svg.height.into_pt(DOTS_PER_INCH).into();
-    let quiet_zone_length = desired_svg_length / (svg.height.0 as f32) * 4.0;
+    let quiet_zone_length = desired_svg_length / ((svg.height.0 + 8) as f32) * 4.0;
+    let bottom_offset = if page_num % 2 == 0 {
+        bounds.bottom + repo_banner_height.into() + quiet_zone_length
+    } else {
+        bounds.top - desired_svg_length - repo_banner_height.into()
+    };
     let object = svg.into_xobject(layer);
     object.clone().add_to_layer(
         layer,
         printpdf::svg::SvgTransform {
             translate_x: Some((bounds.left + quiet_zone_length).into()),
-            translate_y: Some(bounds.bottom.into()),
+            translate_y: Some(bottom_offset.into()),
             rotate: None,
-            scale_x: Some(desired_svg_length / actual_svg_length),
-            scale_y: Some(desired_svg_length / actual_svg_length),
+            scale_x: Some((desired_svg_length - quiet_zone_length * 2.) / actual_svg_length),
+            scale_y: Some((desired_svg_length - quiet_zone_length * 2.) / actual_svg_length),
             dpi: Some(DOTS_PER_INCH),
         },
     );
     object.clone().add_to_layer(
         layer,
         printpdf::svg::SvgTransform {
-            translate_x: Some((bounds.right - desired_svg_length - quiet_zone_length).into()),
-            translate_y: Some(bounds.bottom.into()),
+            translate_x: Some((bounds.right - desired_svg_length + quiet_zone_length).into()),
+            translate_y: Some(bottom_offset.into()),
             rotate: None,
-            scale_x: Some(desired_svg_length / actual_svg_length),
-            scale_y: Some(desired_svg_length / actual_svg_length),
+            scale_x: Some((desired_svg_length - quiet_zone_length * 2.) / actual_svg_length),
+            scale_y: Some((desired_svg_length - quiet_zone_length * 2.) / actual_svg_length),
             dpi: Some(DOTS_PER_INCH),
         },
     );
 
     // Draw the title text: repo, page info, and document id (hash).
-    let repo_font = SizedFont::new(doc, BuiltinFont::Courier, Pt(14.0))?;
     let info_font = SizedFont::new(doc, BuiltinFont::Courier, Pt(24.0))?;
     let label_font = SizedFont::new(doc, BuiltinFont::HelveticaBold, Pt(14.0))?;
     let description_font = SizedFont::new(doc, BuiltinFont::Helvetica, Pt(10.0))?;
-
-    let repo = format!("github.com/mook/paperpack@{commit}");
-    let repo_avail_width = bounds.width() - desired_svg_length * 2.0;
-    repo_font.write(
-        layer,
-        &repo,
-        bounds.left + desired_svg_length + repo_avail_width / 2.0,
-        bounds.top - repo_font.size.into(),
-        &Alignment::Center,
-    );
 
     let document_id = layout.hash[..6].to_base58();
     info_font.write(
         layer,
         document_id,
-        bounds.left + quiet_zone_length + desired_svg_length + quiet_zone_length,
-        bounds.bottom + info_font.descender().into(),
+        bounds.left + desired_svg_length,
+        bottom_offset + info_font.descender().into(),
         &Alignment::Left,
     );
     label_font.write(
         layer,
         "Document ID",
-        bounds.left + quiet_zone_length + desired_svg_length + quiet_zone_length,
-        bounds.bottom + info_font.size.into() + label_font.descender().into(),
+        bounds.left + desired_svg_length,
+        bottom_offset + info_font.size.into() + label_font.descender().into(),
         &Alignment::Left,
     );
 
@@ -199,26 +240,27 @@ fn render_banner(
     info_font.write(
         layer,
         page_info,
-        bounds.right - quiet_zone_length - desired_svg_length - quiet_zone_length,
-        bounds.bottom + info_font.descender().into(),
+        bounds.right - desired_svg_length,
+        bottom_offset + info_font.descender().into(),
         &Alignment::Right,
     );
     label_font.write(
         layer,
         "Page Count",
-        bounds.right - quiet_zone_length - desired_svg_length - quiet_zone_length,
-        bounds.bottom + info_font.size.into() + label_font.descender().into(),
+        bounds.right - desired_svg_length,
+        bottom_offset + info_font.size.into() + label_font.descender().into(),
         &Alignment::Right,
     );
 
     // Write some descriptive text.
     let description = format!(
         "
-        This is a paper backup created using the program listed above.
+        This is a paper backup created using the program listed {}.
         When {}, it can be used to restore the original file.
         More pages may be required if some QR codes fail to be decoded.
         At least one copy of the QR code to the left and right of this text is required.
     ",
+        if page_num % 2 == 0 { "below" } else { "above" },
         if layout.data_page_count == 1 {
             "any page is scanned".to_string()
         } else {
@@ -226,10 +268,10 @@ fn render_banner(
         }
     );
     let description_bounds = &metrics::Bounds {
-        top: bounds.bottom + desired_svg_length,
-        right: bounds.right - quiet_zone_length - desired_svg_length - quiet_zone_length,
-        bottom: bounds.bottom,
-        left: bounds.left + quiet_zone_length + desired_svg_length + quiet_zone_length,
+        top: bottom_offset + desired_svg_length - quiet_zone_length * 2.,
+        right: bounds.right - desired_svg_length,
+        bottom: bottom_offset,
+        left: bounds.left + desired_svg_length,
     };
     description_font.write_section(
         layer,
